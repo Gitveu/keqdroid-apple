@@ -40,10 +40,10 @@ class ConnectionsService {
       final log = await _fromAccessLog();
       return log.entries.isEmpty ? api : log;
     }
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid || Platform.isIOS) {
       if (MihomoApiSession().isActive) {
         final api = await _fromClashApi();
-        if (api.source == ConnectionsSource.coreApi) {
+        if (Platform.isAndroid && api.source == ConnectionsSource.coreApi) {
           return _withAndroidAppNamesFromSource(api);
         }
         return api;
@@ -76,7 +76,7 @@ class ConnectionsService {
     if (Platform.isMacOS) {
       return MacosTunnelBackend.activeInstance?.clashApiPort;
     }
-    if (Platform.isAndroid) return MihomoApiSession().port;
+    if (Platform.isAndroid || Platform.isIOS) return MihomoApiSession().port;
     return null;
   }
 

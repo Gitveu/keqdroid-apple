@@ -73,6 +73,24 @@ class AppInternalsService {
         ),
       ];
     }
+    if (Platform.isIOS) {
+      final versions = (android['coreVersions'] as Map?)
+          ?.cast<Object?, Object?>();
+      final xrayVer = versions?['xray']?.toString();
+      final mihomoVer = versions?['mihomo']?.toString();
+      return [
+        CoreInfo(
+          name: 'xray (KeqCore)',
+          role: CoreRole.core,
+          version: xrayVer,
+        ),
+        CoreInfo(
+          name: 'mihomo (KeqCore)',
+          role: CoreRole.core,
+          version: mihomoVer,
+        ),
+      ];
+    }
     if (Platform.isWindows) {
       return [
         await _core(
@@ -213,8 +231,12 @@ class AppInternalsService {
       status: state?.status ?? VpnStatus.disconnected,
       engine: Platform.isAndroid
           ? _androidCoreBinary(android)
+          : Platform.isIOS
+          ? (MihomoApiSession().isActive ? 'mihomo' : 'xray')
           : _desktopEngine(),
-      mode: Platform.isAndroid ? null : settings.connectionModeEnum,
+      mode: (Platform.isAndroid || Platform.isIOS)
+          ? null
+          : settings.connectionModeEnum,
       socksPort: settings.localPort,
       httpPort: settings.httpPort,
       uptime: state?.duration,
@@ -224,7 +246,7 @@ class AppInternalsService {
           : null,
       clashApiPort: Platform.isWindows
           ? WindowsTunnelBackend.activeInstance?.clashApiPort
-          : Platform.isAndroid
+          : (Platform.isAndroid || Platform.isIOS)
           ? MihomoApiSession().port
           : Platform.isLinux
           ? LinuxTunnelBackend.activeInstance?.clashApiPort
@@ -300,6 +322,13 @@ class AppInternalsService {
       final manufacturer = (android['manufacturer'] as String? ?? '').trim();
       final device = manufacturer.isEmpty ? '' : ' · $manufacturer';
       return 'Android $release (API $sdk)$device';
+    }
+    if (Platform.isIOS) {
+      final iosVer = (android['iosVersion'] as String? ?? '').trim();
+      final model = (android['deviceModel'] as String? ?? '').trim();
+      if (iosVer.isEmpty) return Platform.operatingSystemVersion;
+      final suffix = model.isEmpty ? '' : ' · $model';
+      return 'iOS $iosVer$suffix';
     }
     if (Platform.isWindows) {
       return prettyWindowsVersion(Platform.operatingSystemVersion);

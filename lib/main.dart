@@ -70,6 +70,8 @@ Future<void> main(List<String> args) async {
           FocusManager.instance.highlightStrategy =
               FocusHighlightStrategy.alwaysTraditional;
         }
+      } else if (Platform.isIOS) {
+        await NotificationService.init();
       } else if (Platform.isWindows) {
         await PlatformBootstrap.initialize();
       } else if (Platform.isLinux || Platform.isMacOS) {
@@ -89,7 +91,7 @@ Future<void> main(List<String> args) async {
         }
       }
 
-      if (Platform.isAndroid) {
+      if (Platform.isAndroid || Platform.isIOS) {
         FlutterError.onError = (details) {
           unawaited(
             AppLogger.instance.recordError(

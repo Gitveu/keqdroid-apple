@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -29,25 +31,44 @@ class NotificationService {
     const androidInit = AndroidInitializationSettings(
       '@drawable/ic_notification',
     );
+    const darwinInit = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
     await plugin.initialize(
-      settings: const InitializationSettings(android: androidInit),
+      settings: const InitializationSettings(
+        android: androidInit,
+        iOS: darwinInit,
+      ),
       onDidReceiveNotificationResponse: _onNotificationTap,
     );
 
     ns._plugin = plugin;
     ns._initialized = true;
 
-    final android = plugin
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
-    await android?.requestNotificationsPermission();
+    if (Platform.isAndroid) {
+      final android = plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      await android?.requestNotificationsPermission();
+    } else if (Platform.isIOS) {
+      final ios = plugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >();
+      await ios?.requestPermissions(alert: true, badge: false, sound: true);
+    }
   }
 
   static Future<void> showNotification({
     required VpnState state,
     String? serverName,
   }) async {
+    // On iOS the system status bar shows the VPN badge; avoid spamming local
+    // notifications for every VPN state tick.
+    if (Platform.isIOS) return;
     final ns = instance;
     if (!ns._initialized || ns._plugin == null) {
       AppLogger.instance.warn('NotificationService not initialized');
@@ -109,8 +130,16 @@ class NotificationService {
     const androidInit = AndroidInitializationSettings(
       '@drawable/ic_notification',
     );
+    const darwinInit = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
     await plugin.initialize(
-      settings: const InitializationSettings(android: androidInit),
+      settings: const InitializationSettings(
+        android: androidInit,
+        iOS: darwinInit,
+      ),
     );
     await _showSubscriptionNotice(plugin, subscriptionId, title, body);
   }
@@ -136,7 +165,10 @@ class NotificationService {
       id: _subsNotifIdBase + (subscriptionId.hashCode.abs() % 100),
       title: title,
       body: body,
-      notificationDetails: NotificationDetails(android: details),
+      notificationDetails: NotificationDetails(
+        android: details,
+        iOS: const DarwinNotificationDetails(),
+      ),
     );
   }
 

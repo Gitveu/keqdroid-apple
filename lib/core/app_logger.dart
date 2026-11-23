@@ -20,7 +20,8 @@ class AppLogger {
     if (!Platform.isWindows &&
         !Platform.isLinux &&
         !Platform.isMacOS &&
-        !Platform.isAndroid) {
+        !Platform.isAndroid &&
+        !Platform.isIOS) {
       return;
     }
     try {

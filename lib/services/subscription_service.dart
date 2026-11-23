@@ -1023,6 +1023,8 @@ class SubscriptionService {
     }
     _cachedDeviceModel = Platform.isAndroid
         ? 'Android Device'
+        : Platform.isIOS
+        ? 'iOS Device'
         : Platform.isMacOS
         ? (Platform.localHostname.trim().isNotEmpty
               ? Platform.localHostname.trim()

@@ -7,6 +7,7 @@ import '../tunnel/vpn_backend.dart';
 
 class TunnelSessionBuilder {
   static ConnectionMode resolveMode(AppSettings settings, {bool? isAndroid}) {
+    if (isAndroid == null && Platform.isIOS) return ConnectionMode.tun;
     final android = isAndroid ?? Platform.isAndroid;
     // на Android сохранённый режим только если выбран руками, до 0.13.0 у всех лежит proxy
     if (android && !settings.connectionModeChosen) return ConnectionMode.tun;

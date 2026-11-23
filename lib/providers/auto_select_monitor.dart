@@ -266,7 +266,7 @@ class _AutoSelectMonitor {
       _silence = _silence.next(sent: second.sent, received: second.received);
     }
 
-    final failures = Platform.isAndroid
+    final failures = (Platform.isAndroid || Platform.isIOS)
         ? await VpnNativeBridge.dialFailures()
         : CoreDialFailures.count;
     var newFailures = 0;
@@ -279,7 +279,7 @@ class _AutoSelectMonitor {
 
     final stalled = AutoSelectWatchdog.trafficStalled(
       _silence.silent,
-      desktop: !Platform.isAndroid,
+      desktop: !Platform.isAndroid && !Platform.isIOS,
     );
     if (!stalled &&
         !AutoSelectWatchdog.dialFailuresSuggestDeadServer(newFailures)) {
@@ -297,7 +297,7 @@ class _AutoSelectMonitor {
 
   Future<({int sent, int received})?> _second() async {
     final engine = ref.read(vpnEngineProvider);
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid || Platform.isIOS) {
       final now = await engine.getCurrentState();
       return (sent: now.uploadSpeed ?? 0, received: now.downloadSpeed ?? 0);
     }
@@ -676,7 +676,7 @@ class _AutoSelectMonitor {
   Future<int?> _totalBytes() async {
     final engine = ref.read(vpnEngineProvider);
     try {
-      if (Platform.isAndroid) {
+      if (Platform.isAndroid || Platform.isIOS) {
         final now = await engine.getCurrentState();
         final down = now.totalDownload;
         final up = now.totalUpload;

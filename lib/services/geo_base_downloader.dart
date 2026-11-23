@@ -21,7 +21,7 @@ class GeoBaseDownloader {
 
   static bool isFullBase(GeoAssetIndex index) => index.hasFullGeoip;
 
-  static bool get isSupported => Platform.isAndroid;
+  static bool get isSupported => Platform.isAndroid || Platform.isIOS;
 
   static Future<void> install({
     void Function(double progress)? onProgress,

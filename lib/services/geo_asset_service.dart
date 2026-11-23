@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/app_logger.dart';
 import '../models/app_settings.dart';
+import '../platform/vpn_native_bridge.dart';
 import '../tunnel/linux_core_paths.dart';
 import '../tunnel/macos_core_paths.dart';
 import '../tunnel/windows_core_paths.dart';
@@ -42,6 +43,10 @@ class GeoAssetService {
   static Future<String?> _geoDir() async {
     if (Platform.isAndroid) {
       return (await getApplicationSupportDirectory()).path;
+    }
+    if (Platform.isIOS) {
+      return await VpnNativeBridge.getSharedContainerPath() ??
+          (await getApplicationSupportDirectory()).path;
     }
     if (Platform.isWindows) return WindowsCorePaths.geoAssetDir();
     if (Platform.isLinux) return LinuxCorePaths.geoAssetDir();

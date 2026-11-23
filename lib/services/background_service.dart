@@ -104,8 +104,16 @@ Future<void> _showUpdateNotification({
   const androidInit = AndroidInitializationSettings(
     '@drawable/ic_notification',
   );
+  const darwinInit = DarwinInitializationSettings(
+    requestAlertPermission: false,
+    requestBadgePermission: false,
+    requestSoundPermission: false,
+  );
   await plugin.initialize(
-    settings: const InitializationSettings(android: androidInit),
+    settings: const InitializationSettings(
+      android: androidInit,
+      iOS: darwinInit,
+    ),
   );
 
   String title;
@@ -138,6 +146,7 @@ Future<void> _showUpdateNotification({
         playSound: false,
         enableVibration: false,
       ),
+      iOS: DarwinNotificationDetails(presentSound: false),
     ),
   );
 }

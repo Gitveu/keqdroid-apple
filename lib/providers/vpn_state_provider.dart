@@ -153,7 +153,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
 
   // на ПК логин и пароль держит само приложение, сверять не с кем
   static bool get _syncsCredentials =>
-      debugSyncsCredentials ?? Platform.isAndroid;
+      debugSyncsCredentials ?? (Platform.isAndroid || Platform.isIOS);
 
   // Логин и пароль приложения и ядра расходились: свежий изолят пуст, а старт поверх живой сессии ядро
   // не перезапускает. Тогда всё приложение до перезапуска получало 407 от своего же прокси (Pixel 6a, 12.11.2026)
@@ -198,7 +198,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       api.clear();
       return;
     }
-    if (!Platform.isAndroid) return;
+    if (!Platform.isAndroid && !Platform.isIOS) return;
     if (s.status != VpnStatus.connected) return;
     if (api.isActive || _mihomoApiRestoreInFlight) return;
     _mihomoApiRestoreInFlight = true;
@@ -218,7 +218,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
   }
 
   void _startAndroidPolling() {
-    if (!Platform.isAndroid) return;
+    if (!Platform.isAndroid && !Platform.isIOS) return;
     _androidPollTimer?.cancel();
     _androidPollTimer = Timer.periodic(
       const Duration(milliseconds: 1500),
@@ -232,7 +232,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
   }
 
   void _onAndroidResumed() {
-    if (!Platform.isAndroid) return;
+    if (!Platform.isAndroid && !Platform.isIOS) return;
     ref.read(vpnEngineProvider).refreshStateStream();
     unawaited(syncFromNative());
     _startAndroidPolling();
@@ -271,7 +271,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       _androidLifecycle = null;
     });
 
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid || Platform.isIOS) {
       _androidLifecycle?.dispose();
       _androidLifecycle = AppLifecycleListener(
         onResume: _onAndroidResumed,
@@ -749,7 +749,8 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
 
     var connectionMode = TunnelSessionBuilder.resolveMode(settings);
 
-    if (Platform.isAndroid && connectionMode != ConnectionMode.proxy) {
+    if ((Platform.isAndroid || Platform.isIOS) &&
+        connectionMode != ConnectionMode.proxy) {
       final permitted = await engine.requestVpnPermission();
       if (!permitted) throw const VpnPermissionDeniedException();
     }
@@ -907,10 +908,10 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     final MihomoTunOptions? mihomoTun;
     if (!mihomoPicked) {
       mihomoTun = null;
-    } else if (Platform.isAndroid) {
+    } else if (Platform.isAndroid || Platform.isIOS) {
       mihomoTun = MihomoTunOptions(
         fromFileDescriptor: true,
-        // на Android без root работает только gvisor
+        // на Android и iOS без root работает только gvisor
         stack: TunSettings.stackGvisor,
         autoRoute: false,
         ipv6: ipv6ViaVpn ? TunSettings.ipv6Vpn : null,
@@ -978,7 +979,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
               AppRoutingMode.allExceptSelected => processNames,
               AppRoutingMode.allProxy => const <String>[],
             },
-            appProcessName: Platform.isAndroid
+            appProcessName: Platform.isAndroid || Platform.isIOS
                 ? ''
                 : p.basename(Platform.resolvedExecutable),
             ruleLists: ruleLists,
@@ -1062,10 +1063,10 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
             localInboundsNoAuth: proxyModeNoAuth,
             geoIndex: customGeoIndex,
             nativeTunInbound:
-                Platform.isAndroid &&
+                (Platform.isAndroid || Platform.isIOS) &&
                 connectionMode == ConnectionMode.tun &&
                 !mihomoPicked,
-            nativeTunIpv6: Platform.isAndroid && ipv6ViaVpn,
+            nativeTunIpv6: (Platform.isAndroid || Platform.isIOS) && ipv6ViaVpn,
             desktopTun: xrayDesktopTun
                 ? DesktopTunOptions(
                     windows: Platform.isWindows,

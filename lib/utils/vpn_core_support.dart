@@ -35,6 +35,7 @@ enum VpnCoreSkip {
 // одно место вместо трёх: раньше только Android было записано в трёх файлах подряд
 bool get mihomoShipsHere =>
     Platform.isAndroid ||
+    Platform.isIOS ||
     Platform.isWindows ||
     Platform.isLinux ||
     Platform.isMacOS;

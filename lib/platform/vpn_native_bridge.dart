@@ -17,6 +17,7 @@ class VpnNativeBridge {
   static bool get supportsNotificationLaunch => Platform.isAndroid;
   static bool get supportsDeepLinks =>
       Platform.isAndroid ||
+      Platform.isIOS ||
       Platform.isWindows ||
       Platform.isLinux ||
       Platform.isMacOS;
@@ -81,7 +82,7 @@ class VpnNativeBridge {
   }
 
   static Future<Map<String, Object?>> getNativeInternals() async {
-    if (!Platform.isAndroid) return const {};
+    if (!Platform.isAndroid && !Platform.isIOS) return const {};
     try {
       final info = await channel.invokeMapMethod<String, Object?>(
         'getNativeInternals',
@@ -89,6 +90,15 @@ class VpnNativeBridge {
       return info ?? const {};
     } catch (_) {
       return const {};
+    }
+  }
+
+  static Future<String?> getSharedContainerPath() async {
+    if (!Platform.isIOS) return null;
+    try {
+      return await channel.invokeMethod<String>('getSharedContainerPath');
+    } catch (_) {
+      return null;
     }
   }
 
@@ -126,7 +136,7 @@ class VpnNativeBridge {
   static bool get supportsSystemAccentEvents => Platform.isAndroid;
 
   static Future<({int port, String secret})?> getMihomoApi() async {
-    if (!Platform.isAndroid) return null;
+    if (!Platform.isAndroid && !Platform.isIOS) return null;
     try {
       final result = await channel.invokeMethod<Map<Object?, Object?>>(
         'getMihomoApi',
@@ -141,7 +151,7 @@ class VpnNativeBridge {
   }
 
   static Future<int?> dialFailures() async {
-    if (!Platform.isAndroid) return null;
+    if (!Platform.isAndroid && !Platform.isIOS) return null;
     try {
       return await channel.invokeMethod<int>('getDialFailures');
     } catch (_) {
@@ -150,7 +160,7 @@ class VpnNativeBridge {
   }
 
   static Future<({int count, int changes})?> physicalNetworks() async {
-    if (!Platform.isAndroid) return null;
+    if (!Platform.isAndroid && !Platform.isIOS) return null;
     try {
       final map = await channel.invokeMapMethod<String, Object?>(
         'getPhysicalNetworks',

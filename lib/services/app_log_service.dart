@@ -28,7 +28,7 @@ class AppLogService {
 
   static List<AppLogSource> get sources => [
     AppLogSource.app,
-    if (Platform.isAndroid) AppLogSource.native,
+    if (Platform.isAndroid || Platform.isIOS) AppLogSource.native,
   ];
 
   static Future<List<LogEntry>> read(AppLogSource source) async =>

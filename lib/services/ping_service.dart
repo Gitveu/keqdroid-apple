@@ -140,6 +140,15 @@ class PingService {
         pingType: PingType.icmp,
       );
     }
+    if (Platform.isIOS) {
+      return PingResult(
+        serverId: server.id,
+        serverName: server.displayName,
+        success: false,
+        error: 'ICMP ping is not supported on iOS',
+        pingType: PingType.icmp,
+      );
+    }
     try {
       final timeoutMs = timeoutSeconds * 1000;
       final safeHost = RegExp(r'^[A-Za-z0-9._:\-]+$').hasMatch(host);
@@ -562,6 +571,7 @@ class PingService {
   static bool get multiPingSupported =>
       debugMultiPingSupported ??
       (Platform.isAndroid ||
+          Platform.isIOS ||
           Platform.isWindows ||
           Platform.isLinux ||
           Platform.isMacOS);
@@ -664,7 +674,7 @@ class PingService {
         config: core == VpnBackend.mihomo
             ? MultiPingConfig.mergeMihomo(
                 probes,
-                httpListeners: !Platform.isAndroid,
+                httpListeners: !Platform.isAndroid && !Platform.isIOS,
               )
             : MultiPingConfig.mergeXray(probes),
         probes: [for (final probe in probes) (probe.id, probe.port)],
@@ -755,7 +765,7 @@ class PingService {
           serverConfig,
           settings,
           socksPort: socksPort,
-          httpInbound: !Platform.isAndroid,
+          httpInbound: !Platform.isAndroid && !Platform.isIOS,
           outboundInterface: outboundInterface,
         )
       : ConfigGeneratorV2.generatePingConfig(
@@ -763,7 +773,7 @@ class PingService {
           settings,
           socksPort: socksPort,
           resolvedServerIp: resolvedServerIp,
-          httpInbound: !Platform.isAndroid,
+          httpInbound: !Platform.isAndroid && !Platform.isIOS,
           outboundInterface: outboundInterface,
         );
 
@@ -1028,7 +1038,8 @@ class PingService {
     bool? platformAlwaysTun,
   }) {
     // на Android активный режим в состояние не доезжает, а туннель там всегда TUN
-    final throughTun = tunMode || (platformAlwaysTun ?? Platform.isAndroid);
+    final throughTun =
+        tunMode || (platformAlwaysTun ?? (Platform.isAndroid || Platform.isIOS));
     if (vpnConnected &&
         throughTun &&
         (base == PingType.tcp || base == PingType.icmp)) {
