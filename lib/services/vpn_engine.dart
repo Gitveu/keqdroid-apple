@@ -3,6 +3,7 @@ import '../tunnel/connection_mode.dart';
 import '../tunnel/tunnel_backend.dart';
 import '../tunnel/tunnel_backend_factory.dart';
 import '../tunnel/android_tunnel_backend.dart';
+import '../tunnel/ios_tunnel_backend.dart';
 import '../tunnel/tunnel_session_request.dart';
 import '../tunnel/tunnel_state.dart';
 import '../tunnel/vpn_backend.dart';
@@ -32,6 +33,8 @@ class VpnEngine {
   void refreshStateStream() {
     final backend = _backend;
     if (backend is AndroidTunnelBackend) {
+      backend.reconnectEventStream();
+    } else if (backend is IosTunnelBackend) {
       backend.reconnectEventStream();
     }
   }

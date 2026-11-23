@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'android_tunnel_backend.dart';
+import 'ios_tunnel_backend.dart';
 import 'linux_tunnel_backend.dart';
 import 'macos_tunnel_backend.dart';
 import 'tunnel_backend.dart';
@@ -8,6 +9,7 @@ import 'windows_tunnel_backend.dart';
 
 TunnelBackend createTunnelBackend() {
   if (Platform.isAndroid) return AndroidTunnelBackend();
+  if (Platform.isIOS) return IosTunnelBackend();
   if (Platform.isWindows) return WindowsTunnelBackend();
   if (Platform.isLinux) return LinuxTunnelBackend();
   if (Platform.isMacOS) return MacosTunnelBackend();
