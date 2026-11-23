@@ -102,6 +102,13 @@ class VpnNativeBridge {
     }
   }
 
+  static Future<void> syncGeoAssets() async {
+    if (!Platform.isIOS) return;
+    try {
+      await channel.invokeMethod<bool>('syncGeoAssets');
+    } catch (_) {}
+  }
+
   static Future<List<Map<Object?, Object?>>> getProcessExits() async {
     if (!Platform.isAndroid) return const [];
     try {

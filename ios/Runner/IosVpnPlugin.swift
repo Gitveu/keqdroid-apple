@@ -30,6 +30,7 @@ final class IosVpnPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
   private var lastNetworkChanges: Int = 0
   private var lastPathSatisfied: Bool = true
   private var lastErrorMessage: String?
+  private var geoSyncInFlight: Bool = false
 
   init(registrar: FlutterPluginRegistrar) {
     self.registrar = registrar
@@ -138,10 +139,15 @@ final class IosVpnPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
       }
 
     case "getXrayLogs":
-      result(readTailText(url: SharedContainer.coreLogURL, maxBytes: 256 * 1024))
+      fetchLogs(kind: "core", result: result)
 
     case "getNativeLog":
-      result(readTailText(url: SharedContainer.nativeLogURL, maxBytes: 256 * 1024))
+      fetchLogs(kind: "native", result: result)
+
+    case "syncGeoAssets":
+      syncGeoToExtensionIfNeeded(restartAfter: true) { ok in
+        result(ok)
+      }
 
     case "getMihomoApi":
       let meta = SharedContainer.readSessionMeta()
@@ -434,6 +440,9 @@ final class IosVpnPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
         return
       }
       self.emitCurrentStatus()
+      if self.activeManager?.connection.status == .connected {
+        self.syncGeoToExtensionIfNeeded(restartAfter: true, completion: nil)
+      }
     }
   }
 
@@ -641,32 +650,157 @@ final class IosVpnPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
   }
 
   private func extractGeoAssetsIfNeeded() {
-    let fm = FileManager.default
-    let dstDir = SharedContainer.containerURL
+    SharedContainer.ensureBundledGeoAssets()
+  }
 
-    let mapping: [(asset: String, target: String, preserveLarger: Bool)] = [
-      ("assets/geo/geoip-lite.dat", "geoip.dat", true),
-      ("assets/bin/windows/geosite.dat", "geosite.dat", true),
-    ]
-
-    for item in mapping {
-      let key = registrar.lookupKey(forAsset: item.asset)
-      guard let srcPath = Bundle.main.path(forResource: key, ofType: nil) else {
-        continue
-      }
-      let dstURL = dstDir.appendingPathComponent(item.target)
-      let srcSize = (try? fm.attributesOfItem(atPath: srcPath)[.size] as? Int) ?? 0
-      let dstSize = (try? fm.attributesOfItem(atPath: dstURL.path)[.size] as? Int) ?? 0
-
-      if fm.fileExists(atPath: dstURL.path) {
-        // Keep user-downloaded full geoip.dat if it is larger than the bundled lite file.
-        if item.preserveLarger && dstSize >= srcSize && dstSize > 0 {
-          continue
-        }
-        try? fm.removeItem(at: dstURL)
-      }
-      try? fm.copyItem(atPath: srcPath, toPath: dstURL.path)
+  private func fetchLogs(kind: String, result: @escaping FlutterResult) {
+    let localURL = kind == "native" ? SharedContainer.nativeLogURL : SharedContainer.coreLogURL
+    if SharedContainer.hasSharedAppGroup {
+      result(SharedContainer.readTailText(url: localURL, maxBytes: 256 * 1024))
+      return
     }
+    guard let session = activeManager?.connection as? NETunnelProviderSession,
+          session.status == .connected,
+          let data = try? JSONSerialization.data(withJSONObject: ["cmd": "logs", "kind": kind]) else {
+      result(SharedContainer.readTailText(url: localURL, maxBytes: 256 * 1024))
+      return
+    }
+    do {
+      try session.sendProviderMessage(data) { reply in
+        DispatchQueue.main.async {
+          if let reply = reply,
+             let json = (try? JSONSerialization.jsonObject(with: reply)) as? [String: Any],
+             let text = json["text"] as? String, !text.isEmpty {
+            result(text)
+          } else {
+            result(SharedContainer.readTailText(url: localURL, maxBytes: 256 * 1024))
+          }
+        }
+      }
+    } catch {
+      result(SharedContainer.readTailText(url: localURL, maxBytes: 256 * 1024))
+    }
+  }
+
+  /// Syncs a user-downloaded full `geoip.dat` (23+ MB) into the extension sandbox
+  /// in 512 KB chunks when running under a wildcard cert without a shared App Group.
+  private func syncGeoToExtensionIfNeeded(restartAfter: Bool, completion: ((Bool) -> Void)?) {
+    if SharedContainer.hasSharedAppGroup {
+      completion?(true)
+      return
+    }
+    if geoSyncInFlight {
+      completion?(false)
+      return
+    }
+    guard let session = activeManager?.connection as? NETunnelProviderSession,
+          session.status == .connected else {
+      completion?(false)
+      return
+    }
+    let localURL = SharedContainer.geoipURL
+    let localSize = SharedContainer.fileSize(at: localURL)
+    // Bundled geoip-lite.dat (~0.6 MB) is already extracted directly by the extension.
+    if localSize < 2 * 1024 * 1024 {
+      completion?(true)
+      return
+    }
+    guard let infoPayload = try? JSONSerialization.data(withJSONObject: ["cmd": "geoInfo"]) else {
+      completion?(false)
+      return
+    }
+
+    geoSyncInFlight = true
+    do {
+      try session.sendProviderMessage(infoPayload) { [weak self] reply in
+        guard let self = self else { return }
+        let extSize = (reply.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any])?["size"] as? Int ?? 0
+        if extSize == localSize {
+          DispatchQueue.main.async {
+            self.geoSyncInFlight = false
+            completion?(true)
+          }
+          return
+        }
+        DispatchQueue.global(qos: .utility).async {
+          self.streamGeoFile(localURL: localURL, totalSize: localSize, session: session, restartAfter: restartAfter) { ok in
+            DispatchQueue.main.async {
+              self.geoSyncInFlight = false
+              completion?(ok)
+            }
+          }
+        }
+      }
+    } catch {
+      geoSyncInFlight = false
+      completion?(false)
+    }
+  }
+
+  private func streamGeoFile(
+    localURL: URL,
+    totalSize: Int,
+    session: NETunnelProviderSession,
+    restartAfter: Bool,
+    completion: @escaping (Bool) -> Void
+  ) {
+    guard let handle = try? FileHandle(forReadingFrom: localURL) else {
+      completion(false)
+      return
+    }
+    defer { try? handle.close() }
+
+    let chunkSize = 512 * 1024
+    var offset = 0
+
+    while offset < totalSize {
+      let chunk: Data = autoreleasepool {
+        (try? handle.read(upToCount: chunkSize)) ?? Data()
+      }
+      if chunk.isEmpty { break }
+      let nextOffset = offset + chunk.count
+      let done = nextOffset >= totalSize
+      let payloadObj: [String: Any] = [
+        "cmd": "geoChunk",
+        "offset": offset,
+        "totalSize": totalSize,
+        "done": done,
+        "data": chunk.base64EncodedString(),
+      ]
+      guard let payload = try? JSONSerialization.data(withJSONObject: payloadObj) else {
+        completion(false)
+        return
+      }
+
+      let sem = DispatchSemaphore(value: 0)
+      var chunkOk = false
+      do {
+        try session.sendProviderMessage(payload) { reply in
+          if let reply = reply,
+             let json = (try? JSONSerialization.jsonObject(with: reply)) as? [String: Any],
+             let ok = json["ok"] as? Bool {
+            chunkOk = ok
+          }
+          sem.signal()
+        }
+      } catch {
+        completion(false)
+        return
+      }
+      if sem.wait(timeout: .now() + 10) == .timedOut || !chunkOk {
+        completion(false)
+        return
+      }
+      offset = nextOffset
+    }
+
+    if restartAfter,
+       let restartPayload = try? JSONSerialization.data(withJSONObject: ["cmd": "restartCore"]) {
+      let sem = DispatchSemaphore(value: 0)
+      try? session.sendProviderMessage(restartPayload) { _ in sem.signal() }
+      _ = sem.wait(timeout: .now() + 10)
+    }
+    completion(true)
   }
 
   private func fetchCoreVersions() -> [String: String] {
@@ -678,16 +812,6 @@ final class IosVpnPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
       return [:]
     }
     return parsed
-  }
-
-  private func readTailText(url: URL, maxBytes: Int) -> String {
-    guard let data = try? Data(contentsOf: url), !data.isEmpty else {
-      return ""
-    }
-    if data.count <= maxBytes {
-      return String(decoding: data, as: UTF8.self)
-    }
-    return String(decoding: data.suffix(maxBytes), as: UTF8.self)
   }
 
   private func hardwareModelIdentifier() -> String {

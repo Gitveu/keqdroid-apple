@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 
 import '../core/app_logger.dart';
+import '../platform/vpn_native_bridge.dart';
 import '../utils/geo_asset_index.dart';
 import 'geo_asset_service.dart';
 import 'release_signature.dart';
@@ -61,6 +62,9 @@ class GeoBaseDownloader {
       await temp.rename(target.path);
       // индекс кэшируется на процесс, без сброса правила чистятся по старому списку
       GeoAssetService.invalidate();
+      if (Platform.isIOS) {
+        await VpnNativeBridge.syncGeoAssets();
+      }
       AppLogger.instance.info(
         'Full geoip base installed ($size bytes) from $url',
       );

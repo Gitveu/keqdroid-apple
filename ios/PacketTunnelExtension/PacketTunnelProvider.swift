@@ -9,7 +9,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
   private var pathObserver: NSKeyValueObservation?
   private var lastPathStatus: NWPathStatus = .invalid
   private var networkChangesCount: Int = 0
+
   private var activeEngine: String = "xray"
+  private var activeConfigPath: String = ""
+  private var activeLogLevel: String = "warning"
+  private var activeTunFd: Int32 = -1
 
   override func startTunnel(
     options: [String: NSObject]?,
@@ -17,6 +21,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
   ) {
     // Stay safely inside iOS 15+ NetworkExtension's 50 MB Jetsam memory ceiling.
     KeqCoreInitMemory(36 * 1024 * 1024, 15)
+
+    // Ensure bundled geoip-lite.dat and geosite.dat exist in our sandbox even
+    // when signed with a wildcard certificate that lacks an App Group.
+    SharedContainer.ensureBundledGeoAssets()
 
     let proto = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration ?? [:]
     let meta = SharedContainer.readSessionMeta()
@@ -57,7 +65,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     let settings = buildNetworkSettings(mtu: mtu, enableIPv6: enableIPv6)
-    SharedContainer.appendNativeLog("PacketTunnel: applying network settings (engine=\(engine), mtu=\(mtu), ipv6=\(enableIPv6))")
+    SharedContainer.appendNativeLog(
+      "PacketTunnel: applying network settings (engine=\(engine), mtu=\(mtu), ipv6=\(enableIPv6), sharedGroup=\(SharedContainer.hasSharedAppGroup))"
+    )
 
     setTunnelNetworkSettings(settings) { [weak self] error in
       guard let self = self else { return }
@@ -78,39 +88,62 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         return
       }
 
-      let dataDir = SharedContainer.containerURL.path
-      let logPath = SharedContainer.coreLogURL.path
-      SharedContainer.appendNativeLog("PacketTunnel: starting \(engine) on utun fd=\(tunFd)")
+      self.activeEngine = engine
+      self.activeConfigPath = configURL.path
+      self.activeLogLevel = logLevel
+      self.activeTunFd = tunFd
 
-      let errPtr: UnsafeMutablePointer<CChar>? = SharedContainer.withCString(engine) { engineC in
-        SharedContainer.withCString(configURL.path) { cfgC in
-          SharedContainer.withCString(dataDir) { dataC in
-            SharedContainer.withCString(logLevel) { lvlC in
-              SharedContainer.withCString(logPath) { logC in
-                KeqCoreStart(engineC, cfgC, dataC, tunFd, lvlC, logC)
-              }
-            }
-          }
-        }
-      }
-      if let errPtr = errPtr {
-        let message = String(cString: errPtr)
-        KeqCoreFreeString(errPtr)
-        SharedContainer.appendNativeLog("PacketTunnel: KeqCoreStart failed: \(message)")
-        let err = NSError(
-          domain: "com.keqdroid.PacketTunnel",
-          code: 1003,
-          userInfo: [NSLocalizedDescriptionKey: message]
-        )
-        completionHandler(err)
+      if let startErr = self.launchCore(engine: engine, configPath: configURL.path, logLevel: logLevel, tunFd: tunFd) {
+        completionHandler(startErr)
         return
       }
 
-      self.activeEngine = engine
       self.startPathObserver()
       SharedContainer.appendNativeLog("PacketTunnel: \(engine) started successfully")
       completionHandler(nil)
     }
+  }
+
+  private func launchCore(engine: String, configPath: String, logLevel: String, tunFd: Int32) -> Error? {
+    // Duplicate the utun fd for mihomo (sing-tun closes its passed fd on stop),
+    // keeping activeTunFd intact across hot restarts (e.g. after geoip sync).
+    let coreFd: Int32
+    if engine.lowercased() == "mihomo" {
+      let duplicated = dup(tunFd)
+      coreFd = duplicated >= 0 ? duplicated : tunFd
+    } else {
+      coreFd = tunFd
+    }
+
+    let dataDir = SharedContainer.containerURL.path
+    let logPath = SharedContainer.coreLogURL.path
+    SharedContainer.appendNativeLog("PacketTunnel: starting \(engine) on utun fd=\(coreFd)")
+
+    let errPtr: UnsafeMutablePointer<CChar>? = SharedContainer.withCString(engine) { engineC in
+      SharedContainer.withCString(configPath) { cfgC in
+        SharedContainer.withCString(dataDir) { dataC in
+          SharedContainer.withCString(logLevel) { lvlC in
+            SharedContainer.withCString(logPath) { logC in
+              KeqCoreStart(engineC, cfgC, dataC, coreFd, lvlC, logC)
+            }
+          }
+        }
+      }
+    }
+    if let errPtr = errPtr {
+      let message = String(cString: errPtr)
+      KeqCoreFreeString(errPtr)
+      if engine.lowercased() == "mihomo" && coreFd != tunFd {
+        close(coreFd)
+      }
+      SharedContainer.appendNativeLog("PacketTunnel: KeqCoreStart failed: \(message)")
+      return NSError(
+        domain: "com.keqdroid.PacketTunnel",
+        code: 1003,
+        userInfo: [NSLocalizedDescriptionKey: message]
+      )
+    }
+    return nil
   }
 
   override func stopTunnel(
@@ -121,6 +154,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     pathObserver?.invalidate()
     pathObserver = nil
     KeqCoreStop()
+    activeTunFd = -1
     completionHandler()
   }
 
@@ -128,48 +162,130 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     _ messageData: Data,
     completionHandler: ((Data?) -> Void)?
   ) {
-    guard let json = (try? JSONSerialization.jsonObject(with: messageData)) as? [String: Any],
-          let cmd = json["cmd"] as? String else {
-      completionHandler?(nil)
-      return
+    autoreleasepool {
+      guard let json = (try? JSONSerialization.jsonObject(with: messageData)) as? [String: Any],
+            let cmd = json["cmd"] as? String else {
+        completionHandler?(nil)
+        return
+      }
+
+      switch cmd {
+      case "stats":
+        var rx: Int64 = 0
+        var tx: Int64 = 0
+        var dialFailures: Int64 = 0
+        KeqCoreGetStats(&rx, &tx, &dialFailures)
+        let running = KeqCoreIsRunning() != 0
+        let reply: [String: Any] = [
+          "rx": rx,
+          "tx": tx,
+          "dialFailures": dialFailures,
+          "running": running,
+          "networkChanges": networkChangesCount,
+          "pathSatisfied": defaultPath?.status == .satisfied,
+        ]
+        completionHandler?(try? JSONSerialization.data(withJSONObject: reply))
+
+      case "logs":
+        let kind = (json["kind"] as? String) ?? "core"
+        let url = kind == "native" ? SharedContainer.nativeLogURL : SharedContainer.coreLogURL
+        let text = SharedContainer.readTailText(url: url, maxBytes: 192 * 1024)
+        completionHandler?(try? JSONSerialization.data(withJSONObject: ["text": text]))
+
+      case "geoInfo":
+        let reply: [String: Any] = [
+          "size": SharedContainer.fileSize(at: SharedContainer.geoipURL),
+          "hasSharedAppGroup": SharedContainer.hasSharedAppGroup,
+        ]
+        completionHandler?(try? JSONSerialization.data(withJSONObject: reply))
+
+      case "geoChunk":
+        let reply = handleGeoChunk(json)
+        completionHandler?(try? JSONSerialization.data(withJSONObject: reply))
+
+      case "restartCore":
+        guard activeTunFd >= 0, !activeConfigPath.isEmpty else {
+          completionHandler?(try? JSONSerialization.data(withJSONObject: ["ok": false]))
+          return
+        }
+        KeqCoreStop()
+        let err = launchCore(
+          engine: activeEngine,
+          configPath: activeConfigPath,
+          logLevel: activeLogLevel,
+          tunFd: activeTunFd
+        )
+        var reply: [String: Any] = ["ok": err == nil]
+        if let err = err {
+          reply["error"] = err.localizedDescription
+        }
+        completionHandler?(try? JSONSerialization.data(withJSONObject: reply))
+
+      case "reloadMihomo":
+        let configURL = SharedContainer.configURL(for: "mihomo")
+        if let inlineConfig = json["configContent"] as? String, !inlineConfig.isEmpty {
+          try? inlineConfig.write(to: configURL, atomically: true, encoding: .utf8)
+          activeConfigPath = configURL.path
+        }
+        let errPtr = SharedContainer.withCString(configURL.path) { cfgC in
+          KeqCoreReloadMihomo(cfgC)
+        }
+        var reply: [String: Any] = ["ok": errPtr == nil]
+        if let errPtr = errPtr {
+          reply["error"] = String(cString: errPtr)
+          KeqCoreFreeString(errPtr)
+        }
+        completionHandler?(try? JSONSerialization.data(withJSONObject: reply))
+
+      default:
+        completionHandler?(nil)
+      }
+    }
+  }
+
+  /// Streams a full `geoip.dat` (23+ MB) into the extension sandbox in small
+  /// chunks so memory stays under ~1.5 MB even on wildcard certs without App Group.
+  private func handleGeoChunk(_ json: [String: Any]) -> [String: Any] {
+    guard let offset = json["offset"] as? Int,
+          let totalSize = json["totalSize"] as? Int,
+          let done = json["done"] as? Bool,
+          let b64 = json["data"] as? String,
+          let chunk = Data(base64Encoded: b64) else {
+      return ["ok": false, "error": "invalid geo chunk"]
     }
 
-    switch cmd {
-    case "stats":
-      var rx: Int64 = 0
-      var tx: Int64 = 0
-      var dialFailures: Int64 = 0
-      KeqCoreGetStats(&rx, &tx, &dialFailures)
-      let running = KeqCoreIsRunning() != 0
-      let reply: [String: Any] = [
-        "rx": rx,
-        "tx": tx,
-        "dialFailures": dialFailures,
-        "running": running,
-        "networkChanges": networkChangesCount,
-        "pathSatisfied": defaultPath?.status == .satisfied,
-      ]
-      let data = try? JSONSerialization.data(withJSONObject: reply)
-      completionHandler?(data)
+    let partURL = SharedContainer.containerURL.appendingPathComponent("geoip.dat.part")
+    let fm = FileManager.default
 
-    case "reloadMihomo":
-      let configURL = SharedContainer.configURL(for: "mihomo")
-      if let inlineConfig = json["configContent"] as? String, !inlineConfig.isEmpty {
-        try? inlineConfig.write(to: configURL, atomically: true, encoding: .utf8)
+    do {
+      if offset == 0 {
+        try? fm.removeItem(at: partURL)
+        fm.createFile(atPath: partURL.path, contents: nil)
       }
-      let errPtr = SharedContainer.withCString(configURL.path) { cfgC in
-        KeqCoreReloadMihomo(cfgC)
-      }
-      var reply: [String: Any] = ["ok": errPtr == nil]
-      if let errPtr = errPtr {
-        reply["error"] = String(cString: errPtr)
-        KeqCoreFreeString(errPtr)
-      }
-      let data = try? JSONSerialization.data(withJSONObject: reply)
-      completionHandler?(data)
+      let handle = try FileHandle(forWritingTo: partURL)
+      defer { try? handle.close() }
+      try handle.seek(toOffset: UInt64(offset))
+      try handle.write(contentsOf: chunk)
 
-    default:
-      completionHandler?(nil)
+      if done {
+        let written = SharedContainer.fileSize(at: partURL)
+        if written != totalSize {
+          try? fm.removeItem(at: partURL)
+          return ["ok": false, "error": "size mismatch: \(written) != \(totalSize)"]
+        }
+        let target = SharedContainer.geoipURL
+        if fm.fileExists(atPath: target.path) {
+          _ = try fm.replaceItemAt(target, withItemAt: partURL)
+        } else {
+          try fm.moveItem(at: partURL, to: target)
+        }
+        SharedContainer.appendNativeLog("PacketTunnel: synced full geoip.dat (\(totalSize) bytes) via IPC")
+        return ["ok": true, "size": totalSize]
+      }
+      return ["ok": true]
+    } catch {
+      try? fm.removeItem(at: partURL)
+      return ["ok": false, "error": error.localizedDescription]
     }
   }
 
