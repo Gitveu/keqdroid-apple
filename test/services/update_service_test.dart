@@ -695,4 +695,27 @@ void main() {
       );
     });
   });
+
+  group('iOS release assets', () {
+    final assets = [
+      {'name': 'keqdroid-0.39.2-ios-arm64.ipa'},
+      {'name': 'keqdroid-0.39.2-android.apk'},
+    ];
+
+    test('selects .ipa asset for iOS', () {
+      expect(
+        UpdateService.findAssetNameForPlatform(assets, 'ios'),
+        'keqdroid-0.39.2-ios-arm64.ipa',
+      );
+    });
+
+    test('recognizes .ipa extension for updates', () {
+      expect(
+        UpdateService.extensionFromUrl(
+          'https://example.invalid/keqdroid-0.39.2-ios-arm64.ipa',
+        ),
+        '.ipa',
+      );
+    });
+  });
 }

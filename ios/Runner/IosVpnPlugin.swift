@@ -514,17 +514,16 @@ final class IosVpnPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
       "status": mapStatus(neStatus),
       "downloadSpeed": Int(lastDownloadSpeed),
       "uploadSpeed": Int(lastUploadSpeed),
-      "downloadTotal": Int(lastRxBytes),
-      "uploadTotal": Int(lastTxBytes),
+      "totalDownload": Int(lastRxBytes),
+      "totalUpload": Int(lastTxBytes),
+      "connectionMode": "tun",
     ]
-    if let serverName = meta["serverName"] as? String, !serverName.isEmpty {
-      map["serverName"] = serverName
-    }
-    if neStatus == .connected, let startTime = meta["startTime"] as? Int64 {
-      map["startTime"] = Int(startTime)
+    if neStatus == .connected, let startTimeMs = meta["startTime"] as? Int64 {
+      let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+      map["durationSeconds"] = max(0, Int((nowMs - startTimeMs) / 1000))
     }
     if let err = lastErrorMessage, !err.isEmpty, neStatus == .disconnected {
-      map["errorMessage"] = err
+      map["error"] = err
     }
     return map
   }

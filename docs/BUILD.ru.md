@@ -78,6 +78,22 @@ bash tool/package_macos.sh x86_64       # только Intel
 
 Фаза сборки Xcode копирует `assets/bin/macos/<arch>/{xray,mihomo}` и `assets/bin/macos/{geoip.dat,geosite.dat}` в `keqdroid.app/Contents/Resources/bin/`, а `tool/package_macos.sh` вырезает лишний срез из `.app` через `lipo -thin`. Для подписи сертификатом Developer ID вместо ad-hoc задайте переменную `MACOS_SIGN_IDENTITY`.
 
+## iOS
+
+Требуется iOS 15.0+, Xcode, Go и CocoaPods. Оба ядра (`xray` и `mihomo`) собираются в один общий динамический `KeqCore.xcframework`, разделяемый между `Runner.app` и `PacketTunnelExtension` (в git не хранится):
+
+```bash
+bash tool/build_ios_core.sh             # собирает ios-arm64 KeqCore.xcframework
+flutter pub get
+flutter build ios --release --no-codesign
+```
+
+Сборка и упаковка неподписанного `.ipa` в `release/<версия>/keqdroid-<версия>-ios-arm64.ipa` (для TrollStore, AltStore, Sideloadly или подписи в Xcode с App Group и NetworkExtension):
+
+```bash
+bash tool/package_ios.sh
+```
+
 ## Проверки
 
 ```bash

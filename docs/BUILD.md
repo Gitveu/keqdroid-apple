@@ -78,6 +78,22 @@ bash tool/package_macos.sh x86_64       # Intel only
 
 The Xcode build embeds `assets/bin/macos/<arch>/{xray,mihomo}` and `assets/bin/macos/{geoip.dat,geosite.dat}` into `keqdroid.app/Contents/Resources/bin/`, and `tool/package_macos.sh` thins each `.app` bundle to its single target architecture. Pass `MACOS_SIGN_IDENTITY` to sign with a Developer ID certificate instead of the default ad-hoc signature.
 
+## iOS
+
+Requires iOS 15.0+, Xcode, Go and CocoaPods. Both `xray` and `mihomo` are compiled into a single dynamic `KeqCore.xcframework` shared by `Runner.app` and `PacketTunnelExtension` (not committed to git):
+
+```bash
+bash tool/build_ios_core.sh             # builds ios-arm64 KeqCore.xcframework
+flutter pub get
+flutter build ios --release --no-codesign
+```
+
+To package an unsigned `.ipa` in `release/<version>/keqdroid-<version>-ios-arm64.ipa` (for TrollStore, AltStore, Sideloadly or manual signing in Xcode with an App Group and NetworkExtension entitlement):
+
+```bash
+bash tool/package_ios.sh
+```
+
 ## Checks
 
 ```bash

@@ -159,6 +159,7 @@ void main() {
       'keqdroid-windows-x64-0.36.0.zip',
       'keqdroid-0.36.0-macos-arm64.dmg',
       'keqdroid-0.36.0-macos-x86_64.dmg',
+      'keqdroid-0.36.0-ios-arm64.ipa',
       'SHA256SUMS',
       'SHA256SUMS.sig',
     ];
