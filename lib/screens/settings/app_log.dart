@@ -49,8 +49,15 @@ class _AppLogScreenState extends State<_AppLogScreen> {
     File? file;
     try {
       file = await AppLogService.writeBundleFile(await getTemporaryDirectory());
+      final box = mounted ? context.findRenderObject() as RenderBox? : null;
+      final origin = box == null
+          ? const Rect.fromLTWH(0, 0, 1, 1)
+          : box.localToGlobal(Offset.zero) & box.size;
       await SharePlus.instance.share(
-        ShareParams(files: [XFile(file.path, mimeType: 'text/plain')]),
+        ShareParams(
+          files: [XFile(file.path, mimeType: 'text/plain')],
+          sharePositionOrigin: origin,
+        ),
       );
     } catch (e) {
       if (mounted) {
@@ -81,7 +88,7 @@ class _AppLogScreenState extends State<_AppLogScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final asFile = widget.shareAsFile ?? Platform.isAndroid;
+    final asFile = widget.shareAsFile ?? (Platform.isAndroid || Platform.isIOS);
     return ExpressivePage(
       title: l10n.appLogTitle,
       physics: const ClampingScrollPhysics(),

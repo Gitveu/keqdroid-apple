@@ -10,6 +10,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'linux_appimage_updater.dart';
 import 'linux_install.dart';
@@ -387,6 +388,9 @@ class UpdateService {
     if (Platform.isMacOS) {
       return _findMacosAsset(assets, arm64: Abi.current() == Abi.macosArm64);
     }
+    if (Platform.isIOS) {
+      return _findIosAsset(assets);
+    }
     return _findApkAsset(assets, arm32: Abi.current() == Abi.androidArm);
   }
 
@@ -401,11 +405,21 @@ class UpdateService {
       'linux' => _findLinuxAsset(assets, linuxKind),
       'macos' => _findMacosAsset(assets, arm64: false),
       'macos-arm64' => _findMacosAsset(assets, arm64: true),
+      'ios' => _findIosAsset(assets),
       'android' => _findApkAsset(assets, arm32: false),
       'android-arm' => _findApkAsset(assets, arm32: true),
       _ => null,
     };
     return asset?['name']?.toString();
+  }
+
+  static Map<String, dynamic>? _findIosAsset(List<Object?>? assets) {
+    if (assets == null) return null;
+    for (final asset in assets.cast<Map<String, dynamic>>()) {
+      final name = (asset['name'] ?? '').toString().toLowerCase();
+      if (name.endsWith('.ipa')) return asset;
+    }
+    return null;
   }
 
   static Map<String, dynamic>? _findMacosAsset(
@@ -801,6 +815,7 @@ class UpdateService {
       '.deb',
       '.rpm',
       '.dmg',
+      '.ipa',
       '.zip',
       '.msix',
       '.msi',
@@ -903,6 +918,10 @@ class UpdateService {
     }
     if (Platform.isLinux) {
       await Process.start('xdg-open', [url]);
+      return;
+    }
+    if (Platform.isIOS) {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       return;
     }
     await OpenFilex.open(url);

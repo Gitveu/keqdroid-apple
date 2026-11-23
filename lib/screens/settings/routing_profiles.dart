@@ -699,19 +699,28 @@ void _showRoutingShareSheet(
                   ),
                 ),
                 icon: Icon(
-                  Platform.isAndroid ? Icons.share_rounded : Icons.copy_rounded,
+                  (Platform.isAndroid || Platform.isIOS)
+                      ? Icons.share_rounded
+                      : Icons.copy_rounded,
                   size: 18,
                 ),
                 label: Text(
-                  Platform.isAndroid
+                  (Platform.isAndroid || Platform.isIOS)
                       ? l10n.subscriptionsShareAction
                       : l10n.subscriptionsCopyUrl,
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 onPressed: () async {
-                  if (Platform.isAndroid) {
+                  if (Platform.isAndroid || Platform.isIOS) {
+                    final box = ctx.findRenderObject() as RenderBox?;
+                    final origin = box == null
+                        ? const Rect.fromLTWH(0, 0, 1, 1)
+                        : box.localToGlobal(Offset.zero) & box.size;
                     await SharePlus.instance.share(
-                      ShareParams(text: share.link),
+                      ShareParams(
+                        text: share.link,
+                        sharePositionOrigin: origin,
+                      ),
                     );
                     return;
                   }

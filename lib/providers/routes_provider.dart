@@ -139,8 +139,8 @@ final routeCapabilitiesProvider = Provider<RouteCapabilities>((ref) {
     ),
   );
   return RouteCapabilities(
-    apps: appRoutesRun(mode),
-    appsNeedTun: !appRoutesRun(mode),
+    apps: !Platform.isIOS && appRoutesRun(mode),
+    appsNeedTun: !Platform.isIOS && !appRoutesRun(mode),
     servers: true,
     core: core,
   );

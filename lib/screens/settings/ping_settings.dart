@@ -80,24 +80,26 @@ class _PingSettingsScreenState extends ConsumerState<_PingSettingsScreen> {
                     title: Text(l10n.settingsPingMethodTcp),
                     subtitle: Text(l10n.settingsPingMethodTcpHint),
                   ),
-                  RadioListTile<String>(
-                    value: 'icmp',
-                    activeColor: accent,
-                    title: Text(l10n.settingsPingMethodIcmp),
-                    subtitle: Text(l10n.settingsPingMethodIcmpHint),
-                  ),
+                  if (!Platform.isIOS)
+                    RadioListTile<String>(
+                      value: 'icmp',
+                      activeColor: accent,
+                      title: Text(l10n.settingsPingMethodIcmp),
+                      subtitle: Text(l10n.settingsPingMethodIcmpHint),
+                    ),
                   RadioListTile<String>(
                     value: 'url',
                     activeColor: accent,
                     title: Text(l10n.settingsPingMethodUrl),
                     subtitle: Text(l10n.settingsPingMethodUrlHint),
                   ),
-                  RadioListTile<String>(
-                    value: 'speed',
-                    activeColor: accent,
-                    title: Text(l10n.settingsPingMethodSpeed),
-                    subtitle: Text(l10n.settingsPingMethodSpeedHint),
-                  ),
+                  if (!Platform.isIOS)
+                    RadioListTile<String>(
+                      value: 'speed',
+                      activeColor: accent,
+                      title: Text(l10n.settingsPingMethodSpeed),
+                      subtitle: Text(l10n.settingsPingMethodSpeedHint),
+                    ),
                 ],
               ),
             ),

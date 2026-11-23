@@ -427,9 +427,12 @@ class _ServersTabState extends ConsumerState<ServersTab>
       if (state == AppLifecycleState.resumed) {
         unawaited(ref.read(serversProvider.notifier).autoPingAll());
       }
-      if (Platform.isAndroid && state == AppLifecycleState.resumed) {
+      if ((Platform.isAndroid || Platform.isIOS) &&
+          state == AppLifecycleState.resumed) {
         unawaited(_syncVpnStateFromNative());
-        unawaited(_checkLaunchAction());
+        if (Platform.isAndroid) {
+          unawaited(_checkLaunchAction());
+        }
         unawaited(_checkPendingDeepLink());
       }
     }

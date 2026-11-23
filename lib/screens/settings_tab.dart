@@ -192,7 +192,8 @@ class SettingsTab extends ConsumerWidget {
                         ExpressiveGroup(
                           children: [
                             _LanSharingCard(settingsAsync: settingsAsync),
-                            const _SplitTunnelingSettingsCard(),
+                            if (!Platform.isIOS)
+                              const _SplitTunnelingSettingsCard(),
                             if (Platform.isWindows ||
                                 Platform.isLinux ||
                                 Platform.isMacOS)
