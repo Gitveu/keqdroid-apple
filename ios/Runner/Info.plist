@@ -2,12 +2,16 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.keqdroid.keqdroid.subscription_update</string>
+	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Keqdroid</string>
+	<string>keqdroid</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -22,10 +26,42 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.keqdroid.keqdroid</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>keqdroid</string>
+				<string>keqdis</string>
+				<string>vless</string>
+				<string>vmess</string>
+				<string>trojan</string>
+				<string>ss</string>
+				<string>ssr</string>
+				<string>hysteria</string>
+				<string>hysteria2</string>
+				<string>hy2</string>
+				<string>tuic</string>
+				<string>anytls</string>
+				<string>socks</string>
+				<string>socks5</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>KeqdroidAppGroup</key>
+	<string>group.com.keqdroid.keqdroid</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access is used to scan server and subscription QR codes.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Local network access is used to communicate with the local VPN core and LAN sharing.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
