@@ -73,3 +73,6 @@ secrets/
 /assets/bin/macos/geosite.dat
 /assets/bin/macos/arm64/
 /assets/bin/macos/x86_64/
+
+# Built iOS core XCFramework (generated locally by tool/build_ios_core.sh).
+/ios/Frameworks/KeqCore.xcframework/
